@@ -137,10 +137,7 @@ exports.createOrder = async (req, res) => {
             order
         });
     } catch (err) {
-        res.status(400).json({
-            success: false,
-            error: err.message
-        });
+        res.status(500).json({ success: false, error: process.env.NODE_ENV === 'production' ? 'Payment Gateway Error' : err.message });
     }
 };
 

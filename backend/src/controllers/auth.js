@@ -57,9 +57,9 @@ exports.registerPharmacy = async (req, res) => {
                 error: 'Email already registered'
             });
         }
-        res.status(400).json({
+        res.status(500).json({
             success: false,
-            error: err.message
+            error: process.env.NODE_ENV === 'production' ? 'Server Error' : err.message
         });
     }
 };
@@ -148,9 +148,9 @@ exports.login = async (req, res) => {
 
         sendTokenResponse(user, 200, res);
     } catch (err) {
-        res.status(400).json({
+        res.status(500).json({
             success: false,
-            error: err.message
+            error: process.env.NODE_ENV === 'production' ? 'Server Error' : err.message
         });
     }
 };
