@@ -24,6 +24,7 @@ const Subscription = () => {
     const { user, refreshUser } = useAuth();
     const [promoCode, setPromoCode] = useState('');
     const [applyingPromo, setApplyingPromo] = useState(false);
+    const [promoData, setPromoData] = useState(null);
 
     useEffect(() => {
         fetchSubscriptionStatus();
@@ -91,7 +92,19 @@ const Subscription = () => {
     const handleSubscribe = async (plan) => {
         try {
             setProcessing(true);
-            const res = await api.post('/subscription/create-order', { plan });
+            const payload = { plan };
+            if (promoData && promoCode) {
+                payload.promoCode = promoCode;
+            }
+            const res = await api.post('/subscription/create-order', payload);
+            
+            if (res.data.noPaymentRequired) {
+                toast.success('Subscription activated successfully!');
+                fetchSubscriptionStatus();
+                window.location.reload();
+                return;
+            }
+            
             loadRazorpay(res.data.order, plan);
         } catch (err) {
             toast.error(err.response?.data?.error || err.response?.data?.message || 'Failed to initiate payment');
@@ -124,13 +137,14 @@ const Subscription = () => {
 
         try {
             setApplyingPromo(true);
-            const res = await api.post('/subscription/apply-promo', { code: promoCode });
+            const res = await api.post('/subscription/apply-promo', { 
+                code: promoCode,
+                planPrice: 399 // Providing a default plan price to satisfy backend calculations
+            });
             
-            if (res.data.success) {
-                await refreshUser();
-                toast.success(res.data.message || 'Pro access unlocked!');
-                setPromoCode('');
-                fetchSubscriptionStatus();
+            if (res.data.success || res.data.valid) {
+                toast.success(res.data.message || 'Promo applied!');
+                setPromoData(res.data);
             }
         } catch (err) {
             toast.error(err.response?.data?.error || 'Invalid code');
@@ -260,12 +274,27 @@ const Subscription = () => {
                         <h3 className="text-2xl font-black text-pharmacy-900 mb-1 tracking-tighter uppercase">{plan.name}</h3>
                         <p className="text-[9px] font-black text-pharmacy-400 uppercase tracking-widest mb-8 italic">Tier: PF-{plan.id}</p>
 
-                        <div className="flex items-baseline gap-2 mb-8 p-4 bg-slate-50 rounded-xl justify-center border border-slate-100">
-                            <span className="text-4xl font-black text-pharmacy-900 tracking-tighter">₹{plan.price}</span>
+                        <div className="flex items-baseline gap-2 p-4 bg-slate-50 rounded-xl justify-center border border-slate-100">
+                            {promoData ? (
+                                <>
+                                    <span className="text-xl font-bold text-slate-400 line-through">₹{plan.price}</span>
+                                    <span className="text-4xl font-black text-emerald-600 tracking-tighter">
+                                        ₹{plan.price - (plan.price * (promoData.discountPercent / 100))}
+                                    </span>
+                                </>
+                            ) : (
+                                <span className="text-4xl font-black text-pharmacy-900 tracking-tighter">₹{plan.price}</span>
+                            )}
                             <span className="text-[10px] font-black text-pharmacy-400 uppercase tracking-widest">/mo</span>
                         </div>
+                        {promoData && promoData.durationMonths > 0 && (
+                            <p className="text-[9px] font-black text-emerald-500 text-center uppercase tracking-widest mb-4 italic mt-2">
+                                For the first {promoData.durationMonths} month(s)
+                            </p>
+                        )}
+                        {!promoData && <div className="mb-8"></div>}
 
-                        <ul className="space-y-4 mb-10 flex-1">
+                        <ul className="space-y-4 mb-10 flex-1 mt-4">
                             {plan.features.map((feature, i) => (
                                 <li key={i} className="flex items-center gap-3 text-[10px] font-black text-pharmacy-700 uppercase tracking-tighter">
                                     <div className="w-5 h-5 min-w-[20px] flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600">

@@ -13,7 +13,7 @@ const saleSchema = new mongoose.Schema({
         medicine: {
             type: mongoose.Schema.ObjectId,
             ref: 'Medicine',
-            required: true
+            default: null
         },
         name: String,
         quantity: {
@@ -25,7 +25,11 @@ const saleSchema = new mongoose.Schema({
             required: true
         },
         originalPrice: Number,
-        discountApplied: Number
+        discountApplied: Number,
+        manual: {
+            type: Boolean,
+            default: false
+        }
     }],
     totalAmount: {
         type: Number,

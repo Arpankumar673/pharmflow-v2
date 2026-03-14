@@ -33,40 +33,61 @@ exports.createSale = async (req, res) => {
 
         // Validate items and check stock
         for (const item of items) {
-            // Ensure medicine belongs to this pharmacy
-            const medicine = await Medicine.findOne({ _id: item.id, pharmacy: pharmacyId }).session(session);
+            if (item.manual) {
+                // Manual item processing
+                const unitPrice = Number(item.price);
+                const discountAmount = (unitPrice * discountPercentage) / 100;
+                const finalUnitPrice = unitPrice - discountAmount;
 
-            if (!medicine) {
-                throw new Error(`Medicine ${item.id} not found in your pharmacy`);
+                originalSubtotal += (unitPrice * item.quantity);
+                totalDiscount += (discountAmount * item.quantity);
+
+                processedItems.push({
+                    medicine: null, // No reference
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: finalUnitPrice,
+                    originalPrice: unitPrice,
+                    discountApplied: discountAmount,
+                    manual: true
+                });
+            } else {
+                // Ensure medicine belongs to this pharmacy
+                const medicine = await Medicine.findOne({ _id: item.id, pharmacy: pharmacyId }).session(session);
+
+                if (!medicine) {
+                    throw new Error(`Medicine ${item.id} not found in your pharmacy`);
+                }
+
+                if (medicine.quantity < item.quantity) {
+                    throw new Error(`Insufficient stock for ${medicine.name}. Available: ${medicine.quantity}`);
+                }
+
+                // Apply global discount
+                const unitPrice = medicine.sellingPrice;
+                const discountAmount = (unitPrice * discountPercentage) / 100;
+                const finalUnitPrice = unitPrice - discountAmount;
+                
+                originalSubtotal += (unitPrice * item.quantity);
+                totalDiscount += (discountAmount * item.quantity);
+
+                processedItems.push({
+                    medicine: medicine._id,
+                    name: medicine.name,
+                    quantity: item.quantity,
+                    price: finalUnitPrice,
+                    originalPrice: unitPrice,
+                    discountApplied: discountAmount,
+                    manual: false
+                });
+
+                // Update medicine stock atomically within transaction
+                await Medicine.updateOne(
+                    { _id: medicine._id },
+                    { $inc: { quantity: -item.quantity } },
+                    { session }
+                );
             }
-
-            if (medicine.quantity < item.quantity) {
-                throw new Error(`Insufficient stock for ${medicine.name}. Available: ${medicine.quantity}`);
-            }
-
-            // Apply global discount
-            const unitPrice = medicine.sellingPrice;
-            const discountAmount = (unitPrice * discountPercentage) / 100;
-            const finalUnitPrice = unitPrice - discountAmount;
-            
-            originalSubtotal += (unitPrice * item.quantity);
-            totalDiscount += (discountAmount * item.quantity);
-
-            processedItems.push({
-                medicine: medicine._id,
-                name: medicine.name,
-                quantity: item.quantity,
-                price: finalUnitPrice,
-                originalPrice: unitPrice,
-                discountApplied: discountAmount
-            });
-
-            // Update medicine stock atomically within transaction
-            await Medicine.updateOne(
-                { _id: medicine._id },
-                { $inc: { quantity: -item.quantity } },
-                { session }
-            );
         }
 
         const netSubtotal = originalSubtotal - totalDiscount;

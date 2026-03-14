@@ -1,5 +1,5 @@
 const express = require('express');
-const { updatePreferences, exportSnapshot } = require('../controllers/settings');
+const { getPreferences, updatePreferences, exportSnapshot } = require('../controllers/settings');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(protect);
 router.use(authorize('PharmacyOwner'));
 
+router.get('/', getPreferences);
 router.put('/preferences', updatePreferences);
 router.get('/export-snapshot', exportSnapshot);
 

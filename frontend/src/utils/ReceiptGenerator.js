@@ -55,7 +55,8 @@ export const generateReceipt = (sale, pharmacy) => {
     // Items
     doc.setFont('courier', 'normal');
     sale.items.forEach(item => {
-        const name = item.name.length > 20 ? item.name.substring(0, 18) + '..' : item.name;
+        let nameStr = item.manual ? `${item.name} (M)` : item.name;
+        const name = nameStr.length > 20 ? nameStr.substring(0, 18) + '..' : nameStr;
         doc.text(name.toUpperCase(), 5, y);
         doc.text(item.quantity.toString(), 40, y);
         doc.text(item.price.toFixed(2), 52, y);

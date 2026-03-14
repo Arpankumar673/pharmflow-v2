@@ -8,7 +8,7 @@ const crypto = require('crypto');
 // @access  Private/PharmacyOwner
 exports.createOrder = async (req, res) => {
     try {
-        const { plan } = req.body;
+        const { plan, promoCode } = req.body;
 
         if (!plan) {
             return res.status(400).json({
@@ -17,34 +17,119 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        let amount = 0;
         const pricing = {
-            Basic: 19900, // 199.00 in paisa
-            Pro: 39900,   // 399.00
-            Enterprise: 79900 // 799.00
+            Basic: 199,
+            Pro: 399,
+            Enterprise: 799,
+            BASIC: 199,
+            PRO: 399,
+            ENTERPRISE: 799
         };
 
-        if (!pricing[plan]) {
+        const normalizedPlan = plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase();
+
+        if (!pricing[normalizedPlan] && !pricing[plan]) {
             return res.status(400).json({ success: false, error: 'Invalid plan selected' });
         }
 
-        amount = pricing[plan];
+        let basePrice = pricing[normalizedPlan] || pricing[plan];
+        let finalPrice = basePrice;
+        let discountPercent = 0;
+        let durationMonths = 1; // Default 1 month
+
+        // Handle Promo Code
+        if (promoCode) {
+            const promo = await PromoCode.findOne({ code: promoCode.toUpperCase() });
+            
+            if (!promo || !promo.active || (promo.maxUses && promo.usedCount >= promo.maxUses)) {
+                return res.status(400).json({ success: false, error: 'Invalid or expired promo code' });
+            }
+            
+            const user = await User.findById(req.user.id);
+            if (user.usedPromoCode) {
+                return res.status(400).json({ success: false, error: 'You have already used a promo code' });
+            }
+
+            discountPercent = promo.discountPercent;
+            durationMonths = promo.durationMonths;
+            finalPrice = basePrice - (basePrice * (discountPercent / 100));
+        }
+
+        const startDate = new Date();
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + durationMonths);
+
+        if (finalPrice <= 0) {
+            // Free plan trigger: skip Razorpay
+            await Subscription.create({
+                userId: req.user.id,
+                pharmacyId: req.user.pharmacy,
+                plan: normalizedPlan,
+                amount: basePrice, // Original plan amount
+                pricePaid: 0,
+                status: 'active',
+                paymentStatus: 'paid',
+                startDate,
+                expiryDate,
+                currentPeriodEnd: expiryDate,
+                promoCodeUsed: promoCode ? promoCode.toUpperCase() : null
+            });
+
+            if (promoCode) {
+                await PromoCode.findOneAndUpdate(
+                    { code: promoCode.toUpperCase() },
+                    { $inc: { usedCount: 1 } }
+                );
+                await User.findByIdAndUpdate(req.user.id, {
+                    usedPromoCode: promoCode.toUpperCase(),
+                    plan: normalizedPlan,
+                    subscriptionActive: true,
+                    subscriptionExpires: expiryDate
+                });
+            } else {
+                await User.findByIdAndUpdate(req.user.id, {
+                    plan: normalizedPlan,
+                    subscriptionActive: true,
+                    subscriptionExpires: expiryDate
+                });
+            }
+
+            await Pharmacy.findByIdAndUpdate(req.user.pharmacy, {
+                subscriptionPlan: normalizedPlan,
+                subscriptionStatus: 'Active',
+                status: 'Active'
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: 'Subscription activated directly',
+                noPaymentRequired: true
+            });
+        }
+
+        const amountInPaisa = Math.round(finalPrice * 100);
 
         const options = {
-            amount: amount,
+            amount: amountInPaisa,
             currency: "INR",
             receipt: `receipt_${Date.now()}`,
         };
 
         const order = await razorpay.orders.create(options);
 
-        // Create a pending subscription record linked to pharmacy
+        // Create a pending subscription record linked to user & pharmacy
         await Subscription.create({
+            userId: req.user.id,
             pharmacyId: req.user.pharmacy,
             razorpayOrderId: order.id,
-            plan: plan,
-            amount: amount / 100,
-            status: 'pending'
+            plan: normalizedPlan,
+            amount: basePrice,
+            pricePaid: finalPrice,
+            status: 'pending',
+            startDate,
+            expiryDate, // We can store this assuming 1 month or durationMonths if they pay
+            currentPeriodEnd: expiryDate,
+            promoCodeUsed: promoCode ? promoCode.toUpperCase() : null
         });
 
         res.status(200).json({
@@ -87,12 +172,29 @@ exports.verifyPayment = async (req, res) => {
             subscription.status = 'active';
             subscription.paymentStatus = 'paid';
             subscription.razorpayPaymentId = razorpay_payment_id;
-            subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+            // expiryDate was saved during createOrder, sync currentPeriodEnd
+            subscription.currentPeriodEnd = subscription.expiryDate;
             await subscription.save();
+
+            // Handle Promo Code marking + User state
+            if (subscription.promoCodeUsed) {
+                await PromoCode.findOneAndUpdate(
+                    { code: subscription.promoCodeUsed },
+                    { $inc: { usedCount: 1 } }
+                );
+            }
+            
+            await User.findByIdAndUpdate(subscription.userId, {
+                usedPromoCode: subscription.promoCodeUsed,
+                plan: subscription.plan,
+                subscriptionActive: true,
+                subscriptionExpires: subscription.expiryDate
+            });
 
             // Update Pharmacy plan
             await Pharmacy.findByIdAndUpdate(subscription.pharmacyId, {
                 subscriptionPlan: subscription.plan,
+                subscriptionStatus: 'Active',
                 status: 'Active'
             });
 
@@ -332,108 +434,55 @@ exports.activatePlan = async (req, res) => {
 // @access  Private/PharmacyOwner
 exports.applyPromo = async (req, res) => {
     try {
-        const { code } = req.body;
+        console.log("Promo request:", req.body);
+        const { planPrice } = req.body;
+        const code = req.body.code?.trim().toUpperCase();
+        
         const userId = req.user.id;
 
         if (!code) {
-            return res.status(400).json({ success: false, error: 'Promo code is required' });
+            return res.status(400).json({ valid: false, message: 'Promo code is required' });
         }
 
         // 1. Check if user already used a promo code
         const user = await User.findById(userId);
         if (user.usedPromoCode) {
-            return res.status(400).json({ success: false, error: 'You have already used a promo code' });
+            return res.status(400).json({ valid: false, message: 'You have already used a promo code' });
         }
 
         // 2. Check if code exists
-        const promo = await PromoCode.findOne({ code: code.toUpperCase() });
+        const promo = await PromoCode.findOne({ code: code, active: true });
         if (!promo) {
-            return res.status(404).json({ success: false, error: 'Invalid promo code' });
+            return res.status(400).json({ valid: false, message: 'Invalid or inactive promo code' });
         }
 
         // 3. Check if code expired
         if (promo.expiresAt && promo.expiresAt < new Date()) {
-            return res.status(400).json({ success: false, error: 'Promo code expired' });
+            return res.status(400).json({ valid: false, message: 'Promo code expired' });
         }
 
         // 4. Check max usage
         if (promo.maxUses && promo.usedCount >= promo.maxUses) {
-            return res.status(400).json({ success: false, error: 'Promo code limit reached' });
+            return res.status(400).json({ valid: false, message: 'Promo usage limit reached' });
         }
 
-        // 5. Apply Logic
-        let duration = promo.durationMonths || 1;
-        let expiresAt = new Date();
-        expiresAt.setMonth(expiresAt.getMonth() + duration);
-
-        if (promo.freePlan) {
-            // Full free access to PRO
-            await Pharmacy.findByIdAndUpdate(req.user.pharmacy, {
-                subscriptionPlan: 'Pro',
-                subscriptionStatus: 'Active',
-                status: 'Active'
-            });
-
-            await Subscription.create({
-                pharmacyId: req.user.pharmacy,
-                plan: 'Pro',
-                amount: 0,
-                status: 'active',
-                paymentStatus: 'paid',
-                currentPeriodEnd: expiresAt,
-                razorpayOrderId: 'PROMO_' + code.toUpperCase() + '_' + Date.now()
-            });
-        } else {
-            // Apply discount logic - still unlocks PRO for the duration in this flow
-            await Pharmacy.findByIdAndUpdate(req.user.pharmacy, {
-                subscriptionPlan: 'Pro',
-                subscriptionStatus: 'Active',
-                status: 'Active'
-            });
-
-            await Subscription.create({
-                pharmacyId: req.user.pharmacy,
-                plan: 'Pro',
-                amount: 0,
-                status: 'active',
-                paymentStatus: 'paid',
-                currentPeriodEnd: expiresAt,
-                razorpayOrderId: 'DISCOUNT_' + code.toUpperCase() + '_' + Date.now()
-            });
-        }
-
-        // 5b. Update User object directly
-        user.plan = 'PRO';
-        user.subscriptionActive = true;
-        user.subscriptionExpires = expiresAt;
-        user.usedPromoCode = code.toUpperCase();
-        
-        await user.save();
-
-        // 6. Update tracking
-        promo.usedCount += 1;
-        await promo.save();
-
-        const updatedPharmacy = await Pharmacy.findById(req.user.pharmacy);
-        
-        const updatedUser = user; // Already updated in memory and saved
+        const basePrice = planPrice || 0;
+        const discountAmount = (basePrice * promo.discountPercent) / 100;
+        const finalPrice = basePrice - discountAmount;
 
         res.status(200).json({
-            success: true,
-            message: promo.freePlan ? '🎉 Pro access unlocked for ' + duration + ' months.' : 'Promo code applied successfully',
-            user: updatedUser,
-            data: {
-                code: promo.code,
-                expiresAt,
-                pharmacy: updatedPharmacy
-            }
+            valid: true,
+            discountPercent: promo.discountPercent,
+            durationMonths: promo.durationMonths,
+            finalPrice,
+            message: `Promo applied: ${promo.discountPercent}% off for ${promo.durationMonths} months!`
         });
 
     } catch (err) {
         console.error('Apply Promo Error:', err);
         res.status(400).json({
-            success: false,
-            error: err.message
+            valid: false,
+            message: err.message
         });
     }
 };

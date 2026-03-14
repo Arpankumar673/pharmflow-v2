@@ -3,39 +3,39 @@ const mongoose = require('mongoose');
 const promoCodeSchema = new mongoose.Schema({
     code: {
         type: String,
-        unique: true,
         required: true,
+        unique: true,
         uppercase: true,
         trim: true
     },
     discountPercent: {
         type: Number,
-        default: 0
-    },
-    freePlan: {
-        type: Boolean,
-        default: false
+        required: true,
+        min: 0,
+        max: 100
     },
     durationMonths: {
         type: Number,
+        required: true,
+        min: 1
+    },
+    type: {
+        type: String,
+        enum: ['percentage', 'free'],
         required: true
+    },
+    active: {
+        type: Boolean,
+        default: true
     },
     maxUses: {
         type: Number,
-        required: true
+        default: null
     },
     usedCount: {
         type: Number,
         default: 0
-    },
-    expiresAt: {
-        type: Date,
-        required: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('PromoCode', promoCodeSchema);

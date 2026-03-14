@@ -88,8 +88,8 @@ const Settings = () => {
                 });
             }
 
-            const pharmRes = await api.get('/pharmacy');
-            if (pharmRes.data.success) {
+            const pharmRes = await api.get('/pharmacy').catch(() => ({ data: { success: false, data: null } }));
+            if (pharmRes.data.success && pharmRes.data.data) {
                 const pharmacy = pharmRes.data.data;
                 setPharmacyData({
                     name: pharmacy.name || '',

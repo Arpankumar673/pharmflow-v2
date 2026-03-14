@@ -51,14 +51,18 @@ const Billing = () => {
     const [showCartMobile, setShowCartMobile] = useState(false);
     const [discountPercentage, setDiscountPercentage] = useState(0);
 
+    // Manual Medicine State
+    const [showManualModal, setShowManualModal] = useState(false);
+    const [manualMed, setManualMed] = useState({ name: '', price: '', quantity: 1 });
+
     const searchInputRef = useRef(null);
 
     useEffect(() => {
         const fetchPreferences = async () => {
             try {
                 const res = await api.get('/pharmacy');
-                if (res.data.success) {
-                    setDiscountPercentage(res.data.data.preferences?.discountPercentage || 0);
+                if (res.data.success && res.data.data) {
+                    setDiscountPercentage(res.data.data.preferences?.discountPercentage || parseInt(res.data.data.preferences?.defaultDiscount) || 0);
                 }
             } catch (err) {
                 console.error('Failed to fetch preferences', err);
@@ -158,6 +162,29 @@ const Billing = () => {
         setSearchResults([]);
     };
 
+    const addManualToCart = () => {
+        if (!manualMed.name.trim() || manualMed.price <= 0 || manualMed.quantity < 1) {
+            return toast.warning('Invalid manual medicine details');
+        }
+
+        const newId = 'manual-' + Date.now();
+        setCart([...cart, {
+            id: newId,
+            name: manualMed.name,
+            barcode: 'MANUAL',
+            price: Number(manualMed.price),
+            quantity: Number(manualMed.quantity),
+            maxStock: 9999,
+            batch: 'MANUAL',
+            manual: true
+        }]);
+
+        setShowManualModal(false);
+        setManualMed({ name: '', price: '', quantity: 1 });
+        setSearchTerm('');
+        setSearchResults([]);
+    };
+
     const updateQuantity = (id, change) => {
         setCart(cart.map(item => {
             if (item.id === id) {
@@ -188,7 +215,13 @@ const Billing = () => {
         setLoading(true);
         try {
             const res = await api.post('/billing/create', {
-                items: cart,
+                items: cart.map(item => ({
+                    id: item.manual ? undefined : item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    manual: item.manual || false
+                })),
                 customerName,
                 customerPhone,
                 paymentMethod
@@ -214,7 +247,14 @@ const Billing = () => {
                     <p className="text-sm font-bold text-slate-400 italic">Universal checkout terminal node.</p>
                 </div>
                 
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <button
+                        onClick={() => setShowManualModal(true)}
+                        className="flex-1 md:flex-none btn bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 py-4 px-6 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 shadow-sm transition-all active:scale-95"
+                    >
+                        <Plus size={18} />
+                        Add Manual
+                    </button>
                     <button
                         onClick={() => setIsScannerOpen(true)}
                         className="flex-1 md:flex-none btn bg-blue-600 hover:bg-blue-700 text-white py-4 px-8 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 shadow-xl shadow-blue-100 transition-all active:scale-95"
@@ -252,28 +292,47 @@ const Billing = () => {
                         />
 
                         {/* Dropdown Results */}
-                        {searchResults.length > 0 && (
+                        {debouncedSearchTerm.length > 1 && (
                             <div className="absolute z-[100] w-full mt-3 bg-white rounded-2xl shadow-2xl border border-slate-50 overflow-hidden max-h-[400px] overflow-y-auto scrollbar-hide">
-                                {searchResults.map(m => (
-                                    <div
-                                        key={m._id}
-                                        className="p-5 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-all group border-b border-slate-50 last:border-none"
-                                        onClick={() => addToCart(m)}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                                                <Pill size={22} />
+                                {searchResults.length > 0 ? (
+                                    searchResults.map(m => (
+                                        <div
+                                            key={m._id}
+                                            className="p-5 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-all group border-b border-slate-50 last:border-none"
+                                            onClick={() => addToCart(m)}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                                                    <Pill size={22} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-slate-900 uppercase tracking-tight">{m.name}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Stock: {m.quantity} • {m.batchNumber}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-black text-slate-900 uppercase tracking-tight">{m.name}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Stock: {m.quantity} • {m.batchNumber}</p>
+                                            <div className="text-right">
+                                                <p className="font-black text-slate-900 text-xl tracking-tighter">₹{m.sellingPrice}</p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-black text-slate-900 text-xl tracking-tighter">₹{m.sellingPrice}</p>
-                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-8 text-center bg-slate-50">
+                                        <AlertCircle size={32} className="mx-auto text-slate-400 mb-3" />
+                                        <p className="font-black text-slate-900 uppercase tracking-tight mb-4">
+                                            Medicine not found in inventory
+                                        </p>
+                                        <button
+                                            onClick={() => {
+                                                setManualMed(prev => ({ ...prev, name: searchTerm }));
+                                                setShowManualModal(true);
+                                                setSearchResults([]);
+                                            }}
+                                            className="bg-blue-600 text-white py-3 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 mx-auto"
+                                        >
+                                            <Plus size={14} /> Add as Manual Medicine
+                                        </button>
                                     </div>
-                                ))}
+                                )}
                             </div>
                         )}
                     </div>
@@ -307,7 +366,10 @@ const Billing = () => {
                                     ) : cart.map(item => (
                                         <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
                                             <td className="px-8 py-6">
-                                                <p className="font-black text-slate-900 uppercase tracking-tight">{item.name}</p>
+                                                <p className="font-black text-slate-900 uppercase tracking-tight">
+                                                    {item.name}
+                                                    {item.manual && <span className="ml-2 text-[8px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">(MANUAL)</span>}
+                                                </p>
                                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">{item.barcode || item.batch}</p>
                                             </td>
                                             <td className="px-8 py-6 text-center font-bold text-slate-600">₹{item.price}</td>
@@ -449,6 +511,65 @@ const Billing = () => {
                                 className="w-full bg-slate-50 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest text-[10px]"
                             >
                                 Reset Terminal
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Manual Medicine Modal */}
+            {showManualModal && (
+                <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-3xl">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Manual Item</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bypass Inventory Sync</p>
+                            </div>
+                            <button onClick={() => setShowManualModal(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-5">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Item Name</label>
+                                <input
+                                    type="text"
+                                    value={manualMed.name}
+                                    onChange={e => setManualMed({ ...manualMed, name: e.target.value })}
+                                    className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                                    placeholder="E.g. VITAMIN C 500MG"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-5">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Price (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={manualMed.price}
+                                        onChange={e => setManualMed({ ...manualMed, price: e.target.value })}
+                                        className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Quantity</label>
+                                    <input
+                                        type="number"
+                                        value={manualMed.quantity}
+                                        onChange={e => setManualMed({ ...manualMed, quantity: e.target.value })}
+                                        className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                                        placeholder="1"
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                onClick={addManualToCart}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-200 transition-all active:scale-95 mt-4"
+                            >
+                                Add to Bill
                             </button>
                         </div>
                     </div>

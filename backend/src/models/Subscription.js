@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const SubscriptionSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     pharmacyId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Pharmacy',
@@ -39,6 +44,20 @@ const SubscriptionSchema = new mongoose.Schema({
     amount: {
         type: Number,
         required: true
+    },
+    startDate: {
+        type: Date,
+        default: Date.now
+    },
+    expiryDate: {
+        type: Date
+    },
+    pricePaid: {
+        type: Number
+    },
+    promoCodeUsed: {
+        type: String,
+        default: null
     },
     createdAt: {
         type: Date,
