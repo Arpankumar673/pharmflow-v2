@@ -1,5 +1,4 @@
 const express = require('express');
-const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const { authLimiter } = require('../middleware/rateLimiter');
 const admin = require("../config/firebaseAdmin");
@@ -28,25 +27,6 @@ router.put('/resetpassword/:resettoken', resetPassword);
 // TODO: [v2] Implement Multi-Factor Authentication (MFA)
 // TODO: [v2] Add OAuth2 integration (Google/Microsoft)
 // TODO: [v2] Migrate to passport.js for more robust auth strategies
-
-// Google OAuth Routes
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-router.get('/google/callback', 
-    passport.authenticate('google', { failureRedirect: '/login' }),
-    (req, res) => {
-        // Successful authentication, create JWT
-        const token = jwt.sign(
-            { id: req.user._id, role: req.user.role }, 
-            process.env.JWT_SECRET, 
-            { expiresIn: '30d' }
-        );
-        
-        // Redirect to frontend with token
-        // In a real app, you might use a more secure way to pass the token
-        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?token=${token}`);
-    }
-);
 
 // Firebase Google Login
 router.post("/google-login", async (req, res) => {

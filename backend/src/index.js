@@ -8,7 +8,6 @@ const morgan = require('morgan');
 const cors = require('cors');
 const helmet = require('helmet');
 const session = require('express-session');
-const passport = require('./config/passport');
 const connectDB = require('./config/db');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
@@ -52,10 +51,6 @@ app.use(session({
     resave: false,
     saveUninitialized: false
 }));
-
-// Passport initialization
-app.use(passport.initialize());
-app.use(passport.session());
 
 // Set security headers
 app.use(helmet());
@@ -106,31 +101,8 @@ app.get('/', (req, res) => {
 });
 
 
-let PORT = parseInt(process.env.PORT) || 5001;
+const PORT = process.env.PORT || 5000;
 
-/**
- * Starts the server and handles port conflicts by trying the next port.
- * @param {number} port - The port to try listening on.
- */
-function startServer(port) {
-    const server = app.listen(port, () => {
-        console.log(`🚀 PharmFlow v2 API running on port ${port}`);
-    });
-
-    server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.log(`⚠️  Port ${port} is in use, trying ${port + 1}...`);
-            startServer(port + 1);
-        } else {
-            console.error('❌ Server error:', err);
-        }
-    });
-
-    // Handle unhandled promise rejections within the server context
-    process.on('unhandledRejection', (err, promise) => {
-        console.log(`Unhandled Rejection: ${err.message}`);
-        server.close(() => process.exit(1));
-    });
-}
-
-startServer(PORT);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
