@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { auth } from '../firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -9,25 +11,27 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const checkLoggedIn = async () => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            setLoading(false);
-            return;
-        }
-
-        try {
-            const res = await api.get('/auth/profile');
-            setUser(res.data.data);
-        } catch (err) {
-            localStorage.removeItem('token');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        checkLoggedIn();
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                try {
+                    const token = await firebaseUser.getIdToken();
+                    const res = await api.post('/auth/login', { token });
+                    localStorage.setItem('token', res.data.token);
+                    setUser(res.data.user);
+                } catch (err) {
+                    console.error('Firebase Auth sync failed', err);
+                    localStorage.removeItem('token');
+                    setUser(null);
+                }
+            } else {
+                localStorage.removeItem('token');
+                setUser(null);
+            }
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const refreshUser = async () => {
@@ -40,18 +44,28 @@ export const AuthProvider = ({ children }) => {
     };
 
     const login = async (email, password) => {
-        const res = await api.post('/auth/login', { email, password });
+        // Authenticate with Firebase natively
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const token = await userCredential.user.getIdToken();
+        
+        // Sync with backend API
+        const res = await api.post('/auth/login', { token });
         localStorage.setItem('token', res.data.token);
         setUser(res.data.user);
         return res.data;
     };
 
-    const setToken = (token) => {
+    const setToken = async (token) => {
         localStorage.setItem('token', token);
-        checkLoggedIn();
+        await refreshUser();
     };
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+            await signOut(auth);
+        } catch (err) {
+            console.error('Firebase signout error', err);
+        }
         localStorage.removeItem('token');
         setUser(null);
     };

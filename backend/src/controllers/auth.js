@@ -119,8 +119,45 @@ exports.registerStaff = async (req, res) => {
 // @access  Public
 exports.login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, token } = req.body;
 
+        // 1. Firebase Token Login
+        if (token) {
+            const admin = require('../config/firebaseAdmin');
+            let decodedToken;
+            try {
+                decodedToken = await admin.auth().verifyIdToken(token);
+            } catch (err) {
+                return res.status(401).json({ success: false, error: 'Invalid or expired Firebase token' });
+            }
+
+            const userEmail = decodedToken.email;
+            let user = await User.findOne({ email: userEmail }).populate('pharmacy');
+            
+            if (!user) {
+                // Determine provider based on Firebase sign_in_provider
+                const signInProvider = decodedToken.firebase?.sign_in_provider;
+                const isGoogle = signInProvider === 'google.com';
+                
+                if (isGoogle) {
+                    user = await User.create({
+                        name: decodedToken.name || 'User',
+                        email: userEmail,
+                        provider: 'google',
+                        role: 'PharmacyOwner'
+                    });
+                } else {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'User not found. Please register your pharmacy first.'
+                    });
+                }
+            }
+
+            return sendTokenResponse(user, 200, res);
+        }
+
+        // 2. Legacy Email/Password Login
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
