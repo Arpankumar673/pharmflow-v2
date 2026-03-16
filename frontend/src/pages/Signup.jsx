@@ -75,9 +75,17 @@ const Signup = () => {
         }
     };
 
-    const handleGoogleLogin = () => {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-        window.location.href = `${apiUrl}/auth/google`;
+    const handleGoogleLogin = async () => {
+        try {
+            const { supabase } = await import('../lib/supabase');
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google'
+            });
+            if (error) throw error;
+        } catch (err) {
+            console.error(err);
+            toast.error('Google Authentication Failed');
+        }
     };
 
     return (

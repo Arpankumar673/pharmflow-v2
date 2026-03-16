@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, Loader2, Pill, ChevronRight, Eye, EyeOff } from '../constants/icons';
 import { toast } from 'react-toastify';
-import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../firebase";
-import api from "../services/api";
+import { supabase } from '../lib/supabase';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -15,30 +13,30 @@ const Login = () => {
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const { login, setToken } = useAuth();
+    const { login, user } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
+    const loginAttemptedRef = useRef(false);
 
-    // Firebase Google Login Handler
+    // Navigate to dashboard only after user state is fully propagated in context
+    useEffect(() => {
+        if (loginAttemptedRef.current && user) {
+            loginAttemptedRef.current = false;
+            navigate('/dashboard', { replace: true });
+        }
+    }, [user, navigate]);
+
     const loginWithGoogle = async () => {
         setIsSubmitting(true);
-        try {
-            const result = await signInWithPopup(auth, googleProvider);
-            const user = result.user;
-            const firebaseToken = await user.getIdToken();
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: window.location.origin
+            }
+        });
 
-            // Send Firebase token to backend to get PharmFlow JWT
-            const response = await api.post("/auth/google-login", {
-                token: firebaseToken
-            });
-
-            setToken(response.data.token);
-            toast.success('Authenticated via Google');
-            navigate('/');
-        } catch (error) {
-            console.error("Google login failed", error);
+        if (error) {
+            console.error(error);
             toast.error("Google Authentication Failed");
-        } finally {
             setIsSubmitting(false);
         }
     };
@@ -55,10 +53,12 @@ const Login = () => {
         setIsSubmitting(true);
 
         try {
+            loginAttemptedRef.current = true;
             await login(email, password);
             toast.success('Welcome back to PharmFlow v2');
-            navigate('/');
+            // navigate() is handled by the useEffect watching user state above
         } catch (err) {
+            loginAttemptedRef.current = false;
             console.error(err);
             setError(err.response?.data?.error || 'Authentication failed. Please check your credentials.');
         } finally {

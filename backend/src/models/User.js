@@ -4,7 +4,8 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
-        required: [true, 'Please add a name']
+        required: [true, 'Please add a name'],
+        trim: true
     },
     email: {
         type: String,
@@ -21,18 +22,17 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    // Optional — Supabase manages passwords, no local password needed
     password: {
         type: String,
-        required: function () {
-            return this.provider !== 'google';
-        },
         minlength: 6,
         select: false
     },
+    // Supports Supabase providers: email, google, github
     provider: {
         type: String,
-        enum: ['local', 'google'],
-        default: 'local'
+        enum: ['local', 'email', 'google', 'github'],
+        default: 'email'
     },
     googleId: {
         type: String,
@@ -42,14 +42,12 @@ const userSchema = new mongoose.Schema({
     role: {
         type: String,
         enum: ['SuperAdmin', 'PharmacyOwner', 'Pharmacist', 'Staff', 'Cashier'],
-        default: 'Staff'
+        default: 'PharmacyOwner'
     },
+    // Optional — Supabase users don't need a pharmacy on first login
     pharmacy: {
         type: mongoose.Schema.ObjectId,
-        ref: 'Pharmacy',
-        required: function () { 
-            return this.role !== 'SuperAdmin' && this.provider !== 'google'; 
-        }
+        ref: 'Pharmacy'
     },
     usedPromoCode: {
         type: String,
@@ -62,7 +60,7 @@ const userSchema = new mongoose.Schema({
     },
     subscriptionActive: {
         type: Boolean,
-        default: false
+        default: true
     },
     subscriptionExpires: {
         type: Date,
@@ -76,33 +74,33 @@ const userSchema = new mongoose.Schema({
     }
 });
 
-// Encrypt password using bcrypt
+// Only hash password if it exists and was modified
+// Supabase users have no local password — skip bcrypt entirely for them
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) {
-        next();
+    if (!this.password || !this.isModified('password')) {
+        return next();
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
-// Match user entered password to hashed password in database
+// Match entered password to hashed password
 userSchema.methods.matchPassword = async function (enteredPassword) {
+    if (!this.password) return false;
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Generate and hash password token
+// Generate and hash password reset token
 userSchema.methods.getResetPasswordToken = function () {
     const crypto = require('crypto');
-    // Generate token
     const resetToken = crypto.randomBytes(20).toString('hex');
 
-    // Hash token and set to resetPasswordToken field
     this.resetPasswordToken = crypto
         .createHash('sha256')
         .update(resetToken)
         .digest('hex');
 
-    // Set expire
     this.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 hour
 
     return resetToken;

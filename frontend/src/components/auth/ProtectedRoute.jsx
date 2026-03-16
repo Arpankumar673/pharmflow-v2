@@ -7,6 +7,7 @@ const ProtectedRoute = ({ children, roles, plans }) => {
     const { user, loading, hasPlan } = useAuth();
     const { hasPermission } = useRole();
 
+    // Wait until auth loading finishes
     if (loading) {
         return (
             <div className="h-screen flex items-center justify-center">
@@ -15,18 +16,18 @@ const ProtectedRoute = ({ children, roles, plans }) => {
         );
     }
 
+    // If no user → go to login
     if (!user) {
         return <Navigate to="/login" replace />;
     }
 
-    // Role check
-    if (roles && !hasPermission(roles)) {
+    // If user exists but role context not ready yet, allow render
+    if (roles && user?.role && !hasPermission(roles)) {
         return <Navigate to="/unauthorized" replace />;
     }
 
-    // Plan check for premium features
+    // Plan check
     if (plans && plans.length > 0 && !hasPlan(plans[0])) {
-        // If it's a premium feature requiring a specific plan, redirect to subscription
         return <Navigate to="/subscription" replace />;
     }
 

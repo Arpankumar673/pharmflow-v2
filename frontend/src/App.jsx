@@ -64,7 +64,8 @@ function App() {
                                 <Route path="/unauthorized" element={<Unauthorized />} />
 
                                 <Route path="/" element={<Layout />}>
-                                    <Route index element={
+                                    <Route index element={<Navigate to="/dashboard" replace />} />
+                                    <Route path="dashboard" element={
                                         <ProtectedRoute roles={['PharmacyOwner', 'Pharmacist', 'SuperAdmin']}>
                                             <Dashboard />
                                         </ProtectedRoute>

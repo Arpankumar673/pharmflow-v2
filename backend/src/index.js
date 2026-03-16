@@ -41,6 +41,9 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// Trust reverse proxy for rate limiters (Render, Heroku, etc.)
+app.set('trust proxy', 1);
+
 // Enable CORS
 const allowedOrigins = [
     'http://localhost:5173',

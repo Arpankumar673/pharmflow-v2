@@ -121,39 +121,60 @@ exports.login = async (req, res) => {
     try {
         const { email, password, token } = req.body;
 
-        // 1. Firebase Token Login
+        // 1. Supabase Token Login
         if (token) {
-            const admin = require('../config/firebaseAdmin');
-            let decodedToken;
+            const { createClient } = require('@supabase/supabase-js');
+            const supabase = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_ROLE
+            );
+
+            let supabaseUser;
             try {
-                decodedToken = await admin.auth().verifyIdToken(token);
+                const { data, error } = await supabase.auth.getUser(token);
+                if (error || !data.user) throw new Error('Invalid or expired Supabase token');
+                supabaseUser = data.user;
             } catch (err) {
-                return res.status(401).json({ success: false, error: 'Invalid or expired Firebase token' });
+                return res.status(401).json({ success: false, error: 'Invalid or expired Supabase token' });
             }
 
-            const userEmail = decodedToken.email;
+            const userEmail = supabaseUser.email;
+            console.log('Supabase login:', userEmail);
+
             let user = await User.findOne({ email: userEmail }).populate('pharmacy');
             
             if (!user) {
-                // Determine provider based on Firebase sign_in_provider
-                const signInProvider = decodedToken.firebase?.sign_in_provider;
-                const isGoogle = signInProvider === 'google.com';
-                
-                if (isGoogle) {
+                // Auto-create MongoDB user for any valid Supabase user (email or OAuth)
+                const provider = supabaseUser.app_metadata?.provider || 'email';
+                const name =
+                    supabaseUser.user_metadata?.full_name ||
+                    supabaseUser.user_metadata?.name ||
+                    userEmail.split('@')[0];
+
+                try {
                     user = await User.create({
-                        name: decodedToken.name || 'User',
+                        name,
                         email: userEmail,
-                        provider: 'google',
-                        role: 'PharmacyOwner'
+                        provider,
+                        role: 'PharmacyOwner',
+                        subscriptionActive: true,
+                        plan: 'BASIC'
                     });
-                } else {
-                    return res.status(404).json({
-                        success: false,
-                        error: 'User not found. Please register your pharmacy first.'
-                    });
+                } catch (createErr) {
+                    if (createErr.code === 11000) {
+                        // Race condition: another concurrent request already created this user
+                        user = await User.findOne({ email: userEmail }).populate('pharmacy');
+                    } else {
+                        throw createErr;
+                    }
                 }
             }
 
+            if (!user) {
+                return res.status(500).json({ success: false, error: 'Failed to resolve user account' });
+            }
+
+            console.log('Mongo user resolved:', user._id);
             return sendTokenResponse(user, 200, res);
         }
 
