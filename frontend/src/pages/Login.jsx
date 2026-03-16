@@ -27,10 +27,11 @@ const Login = () => {
 
     const loginWithGoogle = async () => {
         setIsSubmitting(true);
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const redirectTo = import.meta.env.VITE_SITE_URL || window.location.origin;
+        const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: window.location.origin
+                redirectTo
             }
         });
 
