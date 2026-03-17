@@ -1,11 +1,14 @@
 const Supplier = require('../models/Supplier');
 
+// Helper: safely extract pharmacy ObjectId whether it's populated or a raw ref
+const pharmacyId = (user) => user.pharmacy?._id ?? user.pharmacy;
+
 // @desc    Get all suppliers
 // @route   GET /api/suppliers
 // @access  Private
 exports.getSuppliers = async (req, res) => {
     try {
-        const suppliers = await Supplier.find({ pharmacy: req.user.pharmacy });
+        const suppliers = await Supplier.find({ pharmacy: pharmacyId(req.user) });
 
         res.status(200).json({
             success: true,
@@ -25,7 +28,7 @@ exports.getSuppliers = async (req, res) => {
 // @access  Private/PharmacyOwner
 exports.addSupplier = async (req, res) => {
     try {
-        req.body.pharmacy = req.user.pharmacy;
+        req.body.pharmacy = pharmacyId(req.user);
         const supplier = await Supplier.create(req.body);
 
         res.status(201).json({
@@ -47,7 +50,7 @@ exports.updateSupplier = async (req, res) => {
     try {
         let supplier = await Supplier.findOne({
             _id: req.params.id,
-            pharmacy: req.user.pharmacy
+            pharmacy: pharmacyId(req.user)
         });
 
         if (!supplier) {
@@ -81,7 +84,7 @@ exports.deleteSupplier = async (req, res) => {
     try {
         const supplier = await Supplier.findOne({
             _id: req.params.id,
-            pharmacy: req.user.pharmacy
+            pharmacy: pharmacyId(req.user)
         });
 
         if (!supplier) {

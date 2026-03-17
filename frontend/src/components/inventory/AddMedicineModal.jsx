@@ -62,11 +62,17 @@ const AddMedicineModal = ({ isOpen, onClose, onSuccess, editingMed, suppliers })
         }
 
         try {
+            // Strip empty barcode — sending '' causes E11000 duplicate key on sparse index
+            const payload = { ...formData };
+            if (!payload.barcode || payload.barcode.trim() === '') {
+                delete payload.barcode;
+            }
+
             if (editingMed) {
-                await api.put(`/inventory/${editingMed._id}`, formData);
+                await api.put(`/inventory/${editingMed._id}`, payload);
                 toast.success('Medicine updated successfully');
             } else {
-                await api.post('/inventory', formData);
+                await api.post('/inventory', payload);
                 toast.success('Medicine added successfully');
             }
             onSuccess();
