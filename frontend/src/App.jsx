@@ -36,6 +36,12 @@ const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'));
 const PharmacyNetwork = lazy(() => import('./pages/PharmacyNetwork'));
 const PriceIntelligence = lazy(() => import('./pages/PriceIntelligence'));
 
+// Legal Pages
+const PrivacyPolicy = lazy(() => import('./pages/legal/PrivacyPolicy'));
+const TermsAndConditions = lazy(() => import('./pages/legal/TermsAndConditions'));
+const RefundPolicy = lazy(() => import('./pages/legal/RefundPolicy'));
+const ContactUs = lazy(() => import('./pages/legal/ContactUs'));
+
 const LoadingScreen = () => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-pharmacy-50 scale-90">
         <div className="w-16 h-16 bg-primary-600 rounded-[24px] flex items-center justify-center text-white shadow-2xl animate-bounce mb-8">
@@ -62,6 +68,12 @@ function App() {
                                 <Route path="/reset-password/:token" element={<ResetPassword />} />
 
                                 <Route path="/unauthorized" element={<Unauthorized />} />
+
+                                {/* Legal Pages — public, no auth required */}
+                                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                                <Route path="/terms" element={<TermsAndConditions />} />
+                                <Route path="/refund-policy" element={<RefundPolicy />} />
+                                <Route path="/contact" element={<ContactUs />} />
 
                                 <Route path="/" element={<Layout />}>
                                     <Route index element={<Navigate to="/dashboard" replace />} />
