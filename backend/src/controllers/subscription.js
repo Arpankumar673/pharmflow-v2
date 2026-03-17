@@ -1,5 +1,7 @@
 const Subscription = require('../models/Subscription');
 const Pharmacy = require('../models/Pharmacy');
+const User = require('../models/User');
+const PromoCode = require('../models/PromoCode');
 const razorpay = require('../utils/razorpay');
 const crypto = require('crypto');
 
@@ -11,19 +13,12 @@ exports.createOrder = async (req, res) => {
         const { plan, promoCode } = req.body;
 
         if (!plan) {
-            return res.status(400).json({
-                success: false,
-                message: "Plan is required"
-            });
+            return res.status(400).json({ success: false, message: 'Plan is required' });
         }
 
         const pricing = {
-            Basic: 199,
-            Pro: 399,
-            Enterprise: 799,
-            BASIC: 199,
-            PRO: 399,
-            ENTERPRISE: 799
+            Basic: 199, Pro: 399, Enterprise: 799,
+            BASIC: 199, PRO: 399, ENTERPRISE: 799
         };
 
         const normalizedPlan = plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase();
@@ -35,21 +30,17 @@ exports.createOrder = async (req, res) => {
         let basePrice = pricing[normalizedPlan] || pricing[plan];
         let finalPrice = basePrice;
         let discountPercent = 0;
-        let durationMonths = 1; // Default 1 month
+        let durationMonths = 1;
 
-        // Handle Promo Code
         if (promoCode) {
             const promo = await PromoCode.findOne({ code: promoCode.toUpperCase() });
-            
             if (!promo || !promo.active || (promo.maxUses && promo.usedCount >= promo.maxUses)) {
                 return res.status(400).json({ success: false, error: 'Invalid or expired promo code' });
             }
-            
             const user = await User.findById(req.user.id);
             if (user.usedPromoCode) {
                 return res.status(400).json({ success: false, error: 'You have already used a promo code' });
             }
-
             discountPercent = promo.discountPercent;
             durationMonths = promo.durationMonths;
             finalPrice = basePrice - (basePrice * (discountPercent / 100));
@@ -60,12 +51,11 @@ exports.createOrder = async (req, res) => {
         expiryDate.setMonth(expiryDate.getMonth() + durationMonths);
 
         if (finalPrice <= 0) {
-            // Free plan trigger: skip Razorpay
             await Subscription.create({
                 userId: req.user.id,
                 pharmacyId: req.user.pharmacy,
                 plan: normalizedPlan,
-                amount: basePrice, // Original plan amount
+                amount: basePrice,
                 pricePaid: 0,
                 status: 'active',
                 paymentStatus: 'paid',
@@ -109,15 +99,12 @@ exports.createOrder = async (req, res) => {
 
         const amountInPaisa = Math.round(finalPrice * 100);
 
-        const options = {
+        const order = await razorpay.orders.create({
             amount: amountInPaisa,
-            currency: "INR",
-            receipt: `receipt_${Date.now()}`,
-        };
+            currency: 'INR',
+            receipt: `receipt_${Date.now()}`
+        });
 
-        const order = await razorpay.orders.create(options);
-
-        // Create a pending subscription record linked to user & pharmacy
         await Subscription.create({
             userId: req.user.id,
             pharmacyId: req.user.pharmacy,
@@ -127,17 +114,18 @@ exports.createOrder = async (req, res) => {
             pricePaid: finalPrice,
             status: 'pending',
             startDate,
-            expiryDate, // We can store this assuming 1 month or durationMonths if they pay
+            expiryDate,
             currentPeriodEnd: expiryDate,
             promoCodeUsed: promoCode ? promoCode.toUpperCase() : null
         });
 
-        res.status(200).json({
-            success: true,
-            order
-        });
+        res.status(200).json({ success: true, order });
+
     } catch (err) {
-        res.status(500).json({ success: false, error: process.env.NODE_ENV === 'production' ? 'Payment Gateway Error' : err.message });
+        res.status(500).json({
+            success: false,
+            error: process.env.NODE_ENV === 'production' ? 'Payment Gateway Error' : err.message
+        });
     }
 };
 
@@ -146,69 +134,73 @@ exports.createOrder = async (req, res) => {
 // @access  Private/PharmacyOwner
 exports.verifyPayment = async (req, res) => {
     try {
-        const {
-            razorpay_order_id,
-            razorpay_payment_id,
-            razorpay_signature
-        } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-        const sign = razorpay_order_id + "|" + razorpay_payment_id;
-        const expectedSign = crypto
-            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-            .update(sign.toString())
-            .digest("hex");
-
-        if (razorpay_signature === expectedSign) {
-            // Payment verified
-            const subscription = await Subscription.findOne({ razorpayOrderId: razorpay_order_id });
-
-            if (!subscription) {
-                return res.status(404).json({ success: false, error: 'Subscription record not found' });
-            }
-
-            subscription.status = 'active';
-            subscription.paymentStatus = 'paid';
-            subscription.razorpayPaymentId = razorpay_payment_id;
-            // expiryDate was saved during createOrder, sync currentPeriodEnd
-            subscription.currentPeriodEnd = subscription.expiryDate;
-            await subscription.save();
-
-            // Handle Promo Code marking + User state
-            if (subscription.promoCodeUsed) {
-                await PromoCode.findOneAndUpdate(
-                    { code: subscription.promoCodeUsed },
-                    { $inc: { usedCount: 1 } }
-                );
-            }
-            
-            await User.findByIdAndUpdate(subscription.userId, {
-                usedPromoCode: subscription.promoCodeUsed,
-                plan: subscription.plan,
-                subscriptionActive: true,
-                subscriptionExpires: subscription.expiryDate
-            });
-
-            // Update Pharmacy plan
-            await Pharmacy.findByIdAndUpdate(subscription.pharmacyId, {
-                subscriptionPlan: subscription.plan,
-                subscriptionStatus: 'Active',
-                status: 'Active'
-            });
-
-            res.status(200).json({
-                success: true,
-                message: "Payment verified successfully"
-            });
-        } else {
-            res.status(400).json({
-                success: false,
-                error: "Invalid signature"
-            });
+        // ── Input Validation ──────────────────────────────────────────────────
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({ success: false, error: 'Missing required payment fields' });
         }
+
+        // ── HMAC SHA256 Signature Verification ────────────────────────────────
+        const sign = razorpay_order_id + '|' + razorpay_payment_id;
+        const expectedSign = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+            .update(sign)
+            .digest('hex');
+
+        // Timing-safe comparison — prevents side-channel/timing attacks
+        const sigBuf = Buffer.from(razorpay_signature, 'utf8');
+        const expBuf = Buffer.from(expectedSign, 'utf8');
+        const isValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+
+        if (!isValid) {
+            return res.status(400).json({ success: false, error: 'Invalid payment signature' });
+        }
+
+        // ── Signature verified — update DB ────────────────────────────────────
+        const subscription = await Subscription.findOne({ razorpayOrderId: razorpay_order_id });
+        if (!subscription) {
+            return res.status(404).json({ success: false, error: 'Subscription record not found' });
+        }
+
+        // Idempotency: guard against double-processing same payment
+        if (subscription.paymentStatus === 'paid') {
+            return res.status(200).json({ success: true, message: 'Payment already verified' });
+        }
+
+        subscription.status = 'active';
+        subscription.paymentStatus = 'paid';
+        subscription.razorpayPaymentId = razorpay_payment_id;
+        subscription.currentPeriodEnd = subscription.expiryDate;
+        await subscription.save();
+
+        if (subscription.promoCodeUsed) {
+            await PromoCode.findOneAndUpdate(
+                { code: subscription.promoCodeUsed },
+                { $inc: { usedCount: 1 } }
+            );
+        }
+
+        await User.findByIdAndUpdate(subscription.userId, {
+            usedPromoCode: subscription.promoCodeUsed || undefined,
+            plan: subscription.plan,
+            subscriptionActive: true,
+            subscriptionExpires: subscription.expiryDate
+        });
+
+        await Pharmacy.findByIdAndUpdate(subscription.pharmacyId, {
+            subscriptionPlan: subscription.plan,
+            subscriptionStatus: 'Active',
+            status: 'Active'
+        });
+
+        res.status(200).json({ success: true, message: 'Payment verified successfully' });
+
     } catch (err) {
-        res.status(400).json({
+        console.error('verifyPayment error:', err);
+        res.status(500).json({
             success: false,
-            error: err.message
+            error: process.env.NODE_ENV === 'production' ? 'Payment verification failed' : err.message
         });
     }
 };
@@ -224,21 +216,12 @@ exports.getSubscriptionStatus = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         if (!subscription) {
-            return res.status(200).json({
-                success: true,
-                data: { plan: 'None', status: 'inactive' }
-            });
+            return res.status(200).json({ success: true, data: { plan: 'None', status: 'inactive' } });
         }
 
-        res.status(200).json({
-            success: true,
-            data: subscription
-        });
+        res.status(200).json({ success: true, data: subscription });
     } catch (err) {
-        res.status(400).json({
-            success: false,
-            error: err.message
-        });
+        res.status(400).json({ success: false, error: err.message });
     }
 };
 
@@ -259,20 +242,11 @@ exports.cancelSubscription = async (req, res) => {
         subscription.status = 'cancelled';
         await subscription.save();
 
-        // Optional: Keep plan until period ends, but for simplicity we cancel now
-        await Pharmacy.findByIdAndUpdate(req.user.pharmacy, {
-            status: 'Suspended'
-        });
+        await Pharmacy.findByIdAndUpdate(req.user.pharmacy, { status: 'Suspended' });
 
-        res.status(200).json({
-            success: true,
-            message: 'Subscription cancelled successfully'
-        });
+        res.status(200).json({ success: true, message: 'Subscription cancelled successfully' });
     } catch (err) {
-        res.status(400).json({
-            success: false,
-            error: err.message
-        });
+        res.status(400).json({ success: false, error: err.message });
     }
 };
 
@@ -283,10 +257,8 @@ exports.getAdminAnalytics = async (req, res) => {
     try {
         const totalPharmacies = await Pharmacy.countDocuments();
         const activeSubscriptions = await Subscription.countDocuments({ status: 'active' });
-
         const subscriptions = await Subscription.find({ status: 'active' });
         const monthlyRevenue = subscriptions.reduce((acc, sub) => acc + sub.amount, 0);
-
         const planDistribution = await Subscription.aggregate([
             { $match: { status: 'active' } },
             { $group: { _id: '$plan', count: { $sum: 1 } } }
@@ -294,36 +266,35 @@ exports.getAdminAnalytics = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: {
-                totalPharmacies,
-                activeSubscriptions,
-                monthlyRevenue,
-                planDistribution
-            }
+            data: { totalPharmacies, activeSubscriptions, monthlyRevenue, planDistribution }
         });
     } catch (err) {
-        res.status(400).json({
-            success: false,
-            error: err.message
-        });
+        res.status(400).json({ success: false, error: err.message });
     }
 };
 
-// @desc    Handle Razorpay Webhooks
+// @desc    Handle Razorpay Webhooks (HMAC verified, timing-safe)
 // @route   POST /api/subscription/webhook
 // @access  Public
 exports.handleWebhook = async (req, res) => {
-    const secret = process.env.RAZORPAY_WEB_SECRET || 'your_webhook_secret';
+    const secret = process.env.RAZORPAY_WEB_SECRET;
+    if (!secret) {
+        console.error('RAZORPAY_WEB_SECRET env var is not set — all webhooks rejected for safety');
+        return res.status(500).send('Webhook secret not configured');
+    }
+
     const signature = req.headers['x-razorpay-signature'];
+    if (!signature) return res.status(400).send('Missing x-razorpay-signature header');
 
     const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(JSON.stringify(req.body))
         .digest('hex');
 
-    if (signature !== expectedSignature) {
-        return res.status(400).send('Invalid signature');
-    }
+    const sigBuf = Buffer.from(signature, 'utf8');
+    const expBuf = Buffer.from(expectedSignature, 'utf8');
+    const isValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    if (!isValid) return res.status(400).send('Invalid webhook signature');
 
     const event = req.body.event;
     const payload = req.body.payload;
@@ -332,7 +303,7 @@ exports.handleWebhook = async (req, res) => {
         if (event === 'payment.captured' || event === 'order.paid') {
             const orderId = payload.payment?.entity?.order_id || payload.order?.entity?.id;
             const subscription = await Subscription.findOne({ razorpayOrderId: orderId });
-            if (subscription) {
+            if (subscription && subscription.paymentStatus !== 'paid') {
                 subscription.status = 'active';
                 subscription.paymentStatus = 'paid';
                 subscription.razorpayPaymentId = payload.payment?.entity?.id;
@@ -365,64 +336,53 @@ exports.handleWebhook = async (req, res) => {
         res.status(500).send('Webhook Processing Error');
     }
 };
-const PromoCode = require('../models/PromoCode');
-const User = require('../models/User');
 
-// @desc    Activate a plan immediately (for Basic or internal use)
+// @desc    Activate a plan manually (SuperAdmin only — requires ADMIN role to prevent free-plan exploit)
 // @route   POST /api/subscription/activate
-// @access  Private/PharmacyOwner
+// @access  Private/SuperAdmin
 exports.activatePlan = async (req, res) => {
     try {
-        const { plan } = req.body;
+        const { plan, targetPharmacyId, targetUserId } = req.body;
         const validPlans = ['BASIC', 'PRO', 'ENTERPRISE'];
 
         if (!plan || !validPlans.includes(plan.toUpperCase())) {
-            return res.status(400).json({ success: false, error: 'Invalid plan protocol' });
+            return res.status(400).json({ success: false, error: 'Invalid plan' });
         }
 
         const normalizedPlan = plan.toUpperCase();
-        const duration = 30; // Default 30 days
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + duration);
+        expiresAt.setDate(expiresAt.getDate() + 30);
 
-        // Update Pharmacy
-        await Pharmacy.findByIdAndUpdate(req.user.pharmacy, {
+        const pharmacyId = targetPharmacyId || req.user.pharmacy;
+        const userId     = targetUserId     || req.user.id;
+
+        await Pharmacy.findByIdAndUpdate(pharmacyId, {
             subscriptionPlan: normalizedPlan,
             subscriptionStatus: 'Active',
             status: 'Active'
         });
 
-        // Update User
-        const user = await User.findById(req.user.id);
-        user.plan = normalizedPlan;
-        user.subscriptionActive = true;
-        user.subscriptionExpires = expiresAt;
-        await user.save();
+        await User.findByIdAndUpdate(userId, {
+            plan: normalizedPlan,
+            subscriptionActive: true,
+            subscriptionExpires: expiresAt
+        });
 
-        // Create or update subscription record
         await Subscription.findOneAndUpdate(
-            { pharmacyId: req.user.pharmacy, status: 'active' },
-            { 
+            { pharmacyId, status: 'active' },
+            {
                 plan: normalizedPlan,
                 amount: 0,
                 paymentStatus: 'paid',
                 currentPeriodEnd: expiresAt,
-                razorpayOrderId: 'ACTIVATE_' + Date.now()
+                razorpayOrderId: 'ADMIN_ACTIVATE_' + Date.now()
             },
             { upsert: true, new: true }
         );
 
-        res.status(200).json({
-            success: true,
-            message: `${normalizedPlan} Protocol Enabled`,
-            user
-        });
-
+        res.status(200).json({ success: true, message: `${normalizedPlan} activated` });
     } catch (err) {
-        res.status(400).json({
-            success: false,
-            error: err.message
-        });
+        res.status(400).json({ success: false, error: err.message });
     }
 };
 
@@ -431,34 +391,28 @@ exports.activatePlan = async (req, res) => {
 // @access  Private/PharmacyOwner
 exports.applyPromo = async (req, res) => {
     try {
-        console.log("Promo request:", req.body);
         const { planPrice } = req.body;
         const code = req.body.code?.trim().toUpperCase();
-        
         const userId = req.user.id;
 
         if (!code) {
             return res.status(400).json({ valid: false, message: 'Promo code is required' });
         }
 
-        // 1. Check if user already used a promo code
         const user = await User.findById(userId);
         if (user.usedPromoCode) {
             return res.status(400).json({ valid: false, message: 'You have already used a promo code' });
         }
 
-        // 2. Check if code exists
-        const promo = await PromoCode.findOne({ code: code, active: true });
+        const promo = await PromoCode.findOne({ code, active: true });
         if (!promo) {
             return res.status(400).json({ valid: false, message: 'Invalid or inactive promo code' });
         }
 
-        // 3. Check if code expired
         if (promo.expiresAt && promo.expiresAt < new Date()) {
             return res.status(400).json({ valid: false, message: 'Promo code expired' });
         }
 
-        // 4. Check max usage
         if (promo.maxUses && promo.usedCount >= promo.maxUses) {
             return res.status(400).json({ valid: false, message: 'Promo usage limit reached' });
         }
@@ -477,9 +431,6 @@ exports.applyPromo = async (req, res) => {
 
     } catch (err) {
         console.error('Apply Promo Error:', err);
-        res.status(400).json({
-            valid: false,
-            message: err.message
-        });
+        res.status(400).json({ valid: false, message: err.message });
     }
 };

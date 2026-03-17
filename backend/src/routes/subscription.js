@@ -21,7 +21,7 @@ router.post('/create-order', authorize('PharmacyOwner'), createOrder);
 router.post('/verify-payment', authorize('PharmacyOwner'), verifyPayment);
 router.get('/status', authorize('PharmacyOwner', 'Pharmacist'), getSubscriptionStatus);
 router.post('/cancel', authorize('PharmacyOwner'), cancelSubscription);
-router.post('/activate', authorize('PharmacyOwner'), activatePlan);
+router.post('/activate', authorize('SuperAdmin'), activatePlan);
 router.post('/apply-promo', authorize('PharmacyOwner'), applyPromo);
 
 // Admin only routes
