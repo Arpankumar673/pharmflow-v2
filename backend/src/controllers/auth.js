@@ -174,7 +174,40 @@ exports.login = async (req, res) => {
                 return res.status(500).json({ success: false, error: 'Failed to resolve user account' });
             }
 
-            console.log('Mongo user resolved:', user._id);
+            // Auto-create a default Pharmacy for this user if they don't have one yet
+            // This is required because all other routes (suppliers, billing, etc.) need req.user.pharmacy
+            if (!user.pharmacy) {
+                const Pharmacy = require('../models/Pharmacy');
+                const name = user.name || userEmail.split('@')[0];
+                
+                let pharmacy;
+                try {
+                    pharmacy = await Pharmacy.create({
+                        name: `${name}'s Pharmacy`,
+                        ownerName: name,
+                        email: userEmail,
+                        phone: '0000000000',
+                        address: 'To be configured',
+                        subscriptionPlan: 'Basic',
+                        subscriptionStatus: 'Trial'
+                    });
+                } catch (pharmErr) {
+                    if (pharmErr.code === 11000) {
+                        // Pharmacy with this email already exists — find and reuse it
+                        pharmacy = await Pharmacy.findOne({ email: userEmail });
+                    } else {
+                        throw pharmErr;
+                    }
+                }
+
+                if (pharmacy) {
+                    user.pharmacy = pharmacy._id;
+                    await user.save({ validateBeforeSave: false });
+                    user = await User.findById(user._id).populate('pharmacy');
+                }
+            }
+
+            console.log('Mongo user resolved:', user._id, '| Pharmacy:', user.pharmacy?._id || 'none');
             return sendTokenResponse(user, 200, res);
         }
 
