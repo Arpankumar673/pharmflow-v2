@@ -181,8 +181,26 @@ const Suppliers = () => {
                 onClose={() => setShowModal(false)}
                 title={editingSup ? 'Update Supplier Node' : 'Register New Vendor'}
                 maxWidth="max-w-xl"
+                footer={
+                    <div className="flex gap-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowModal(false)}
+                            className="flex-1 py-5 rounded-3xl font-black uppercase tracking-widest text-[10px] text-pharmacy-400 hover:bg-pharmacy-50 transition-colors"
+                        >
+                            Abort
+                        </button>
+                        <button
+                            type="submit"
+                            form="supplier-form"
+                            className="flex-[2] py-5 rounded-3xl font-black uppercase tracking-widest text-[10px] bg-primary-600 text-white shadow-xl shadow-primary-200 active:scale-95 transition-all"
+                        >
+                            {editingSup ? 'Commit Updates' : 'Authorize Registry'}
+                        </button>
+                    </div>
+                }
             >
-                <form onSubmit={handleFormSubmit} className="space-y-8 pb-4">
+                <form id="supplier-form" onSubmit={handleFormSubmit} className="space-y-8">
                     <div className="space-y-6">
                         <div className="bg-pharmacy-50/50 p-4 md:p-6 rounded-2xl border border-pharmacy-50">
                             <label className="text-[10px] font-black uppercase tracking-widest text-pharmacy-400 mb-2 block">Corporate Identity</label>
@@ -239,22 +257,6 @@ const Suppliers = () => {
                                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                             ></textarea>
                         </div>
-                    </div>
-
-                    <div className="flex gap-4 pt-6 border-t border-pharmacy-50">
-                        <button
-                            type="button"
-                            onClick={() => setShowModal(false)}
-                            className="flex-1 py-5 rounded-3xl font-black uppercase tracking-widest text-[10px] text-pharmacy-400 hover:bg-pharmacy-50 transition-colors"
-                        >
-                            Abort
-                        </button>
-                        <button
-                            type="submit"
-                            className="flex-[2] py-5 rounded-3xl font-black uppercase tracking-widest text-[10px] bg-primary-600 text-white shadow-xl shadow-primary-200 active:scale-95 transition-all"
-                        >
-                            {editingSup ? 'Commit Updates' : 'Authorize Registry'}
-                        </button>
                     </div>
                 </form>
             </Modal>
