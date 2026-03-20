@@ -182,7 +182,7 @@ const Suppliers = () => {
                 title={editingSup ? 'Update Supplier Node' : 'Register New Vendor'}
                 maxWidth="max-w-xl"
                 footer={
-                    <div className="flex gap-4">
+                    <>
                         <button
                             type="button"
                             onClick={() => setShowModal(false)}
@@ -197,8 +197,9 @@ const Suppliers = () => {
                         >
                             {editingSup ? 'Commit Updates' : 'Authorize Registry'}
                         </button>
-                    </div>
+                    </>
                 }
+
             >
                 <form id="supplier-form" onSubmit={handleFormSubmit} className="space-y-8">
                     <div className="space-y-6">

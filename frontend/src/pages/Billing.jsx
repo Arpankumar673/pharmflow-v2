@@ -28,6 +28,8 @@ import { toast } from 'react-toastify';
 import useDebounce from '../hooks/useDebounce';
 import { generateReceipt } from '../utils/ReceiptGenerator';
 import { useAuth } from '../context/AuthContext';
+import Modal from '../components/common/Modal';
+
 
 // Lazy load BarcodeScanner
 const BarcodeScanner = lazy(() => import('../components/BarcodeScanner'));
@@ -489,92 +491,91 @@ const Billing = () => {
             </div>
 
             {/* Success Modal */}
-            {showSuccess && (
-                <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-[40px] p-10 max-w-sm w-full text-center shadow-3xl">
-                        <div className="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle2 size={40} className="text-emerald-500" />
-                        </div>
-                        <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter uppercase">Verified</h2>
-                        <p className="text-slate-400 font-bold mb-10 text-xs italic uppercase">Transaction Synced to Ledger</p>
-
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => { generateReceipt(lastSale, user?.pharmacy); toast.info('Printing Receipt...'); }}
-                                className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 flex items-center justify-center gap-3"
-                            >
-                                <Printer size={18} />
-                                Print Receipt
-                            </button>
-                            <button
-                                onClick={() => setShowSuccess(false)}
-                                className="w-full bg-slate-50 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest text-[10px]"
-                            >
-                                Reset Terminal
-                            </button>
-                        </div>
+            <Modal
+                isOpen={showSuccess}
+                onClose={() => setShowSuccess(false)}
+                title="Verified"
+                maxWidth="max-w-sm"
+                footer={
+                    <div className="flex flex-col w-full gap-3">
+                        <button
+                            onClick={() => { generateReceipt(lastSale, user?.pharmacy); toast.info('Printing Receipt...'); }}
+                            className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 flex items-center justify-center gap-3"
+                        >
+                            <Printer size={18} />
+                            Print Receipt
+                        </button>
+                        <button
+                            onClick={() => setShowSuccess(false)}
+                            className="w-full bg-slate-50 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                        >
+                            Reset Terminal
+                        </button>
                     </div>
+                }
+            >
+                <div className="text-center py-4">
+                    <div className="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle2 size={40} className="text-emerald-500" />
+                    </div>
+                    <p className="text-slate-400 font-bold text-xs italic uppercase tracking-widest">Transaction Synced to Ledger</p>
                 </div>
-            )}
+            </Modal>
+
 
             {/* Manual Medicine Modal */}
-            {showManualModal && (
-                <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-3xl">
-                        <div className="flex justify-between items-center mb-8">
-                            <div>
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Manual Item</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bypass Inventory Sync</p>
-                            </div>
-                            <button onClick={() => setShowManualModal(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors">
-                                <X size={20} />
-                            </button>
+            <Modal
+                isOpen={showManualModal}
+                onClose={() => setShowManualModal(false)}
+                title="Manual Item"
+                maxWidth="max-w-md"
+                footer={
+                    <button
+                        onClick={addManualToCart}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-200 transition-all active:scale-95"
+                    >
+                        Add to Bill
+                    </button>
+                }
+            >
+                <div className="space-y-6">
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 -mt-4 italic">Bypass Inventory Sync</p>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Item Name</label>
+                        <input
+                            type="text"
+                            value={manualMed.name}
+                            onChange={e => setManualMed({ ...manualMed, name: e.target.value })}
+                            className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                            placeholder="E.g. VITAMIN C 500MG"
+                            autoFocus
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-5">
+                        <div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Price (₹)</label>
+                            <input
+                                type="number"
+                                value={manualMed.price}
+                                onChange={e => setManualMed({ ...manualMed, price: e.target.value })}
+                                className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                                placeholder="0.00"
+                            />
                         </div>
-
-                        <div className="space-y-5">
-                            <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Item Name</label>
-                                <input
-                                    type="text"
-                                    value={manualMed.name}
-                                    onChange={e => setManualMed({ ...manualMed, name: e.target.value })}
-                                    className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
-                                    placeholder="E.g. VITAMIN C 500MG"
-                                    autoFocus
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-5">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Price (₹)</label>
-                                    <input
-                                        type="number"
-                                        value={manualMed.price}
-                                        onChange={e => setManualMed({ ...manualMed, price: e.target.value })}
-                                        className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Quantity</label>
-                                    <input
-                                        type="number"
-                                        value={manualMed.quantity}
-                                        onChange={e => setManualMed({ ...manualMed, quantity: e.target.value })}
-                                        className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
-                                        placeholder="1"
-                                    />
-                                </div>
-                            </div>
-                            <button
-                                onClick={addManualToCart}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-200 transition-all active:scale-95 mt-4"
-                            >
-                                Add to Bill
-                            </button>
+                        <div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Quantity</label>
+                            <input
+                                type="number"
+                                value={manualMed.quantity}
+                                onChange={e => setManualMed({ ...manualMed, quantity: e.target.value })}
+                                className="w-full bg-slate-50 rounded-xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-2 ring-blue-500"
+                                placeholder="1"
+                            />
                         </div>
                     </div>
                 </div>
-            )}
+            </Modal>
+
 
             <Suspense fallback={null}>
                 {isScannerOpen && (

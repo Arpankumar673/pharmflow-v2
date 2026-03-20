@@ -5,6 +5,8 @@ import { toast } from 'react-toastify';
 import clsx from 'clsx';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import Modal from '../common/Modal';
+
 
 const AutoRefillPanel = ({ onOrderCreated }) => {
     const { user, hasPlan } = useAuth();
@@ -197,56 +199,57 @@ const AutoRefillPanel = ({ onOrderCreated }) => {
             </div>
 
             {/* Settings Modal */}
-            {showSettings && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-3xl animate-fade-in">
-                    <div className="bg-white w-full max-w-xl rounded-2xl border border-slate-100 overflow-hidden shadow-2xl animate-scale">
-                        <div className="p-6 md:p-8 border-b border-slate-50 flex items-center justify-between">
-                            <h3 className="font-black text-xl md:text-2xl text-slate-900 uppercase tracking-tighter">Matrix Refactor</h3>
-                            <button onClick={() => setShowSettings(false)} className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-center hover:bg-slate-100">
-                                <XCircle size={20} />
-                            </button>
+            <Modal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                title="Matrix Refactor"
+                maxWidth="max-w-xl"
+                footer={
+                    <button 
+                        form="refill-settings-form"
+                        className="w-full bg-primary-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary-500/30 hover:bg-primary-700 active:scale-95 transition-all"
+                    >
+                        Encrypt Settings
+                    </button>
+                }
+            >
+                <form id="refill-settings-form" onSubmit={saveSettings} className="space-y-8">
+                    <div className="grid grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Min Level</label>
+                            <input 
+                                type="number" 
+                                value={settings.minStockLevel}
+                                onChange={(e) => setSettings({...settings, minStockLevel: parseInt(e.target.value)})}
+                                className="w-full bg-slate-50 border-none rounded-xl px-5 py-4 font-black text-xs"
+                            />
                         </div>
-                        <form onSubmit={saveSettings} className="p-6 md:p-8 space-y-6 md:space-y-8">
-                            <div className="grid grid-cols-2 gap-4 md:gap-8">
-                                <div className="space-y-2 md:space-y-3">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Min Level</label>
-                                    <input 
-                                        type="number" 
-                                        value={settings.minStockLevel}
-                                        onChange={(e) => setSettings({...settings, minStockLevel: parseInt(e.target.value)})}
-                                        className="w-full bg-slate-50 border-none rounded-xl px-5 py-3.5 font-black text-xs"
-                                    />
-                                </div>
-                                <div className="space-y-2 md:space-y-3">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Default Qty</label>
-                                    <input 
-                                        type="number" 
-                                        value={settings.defaultQuantity}
-                                        onChange={(e) => setSettings({...settings, defaultQuantity: parseInt(e.target.value)})}
-                                        className="w-full bg-slate-50 border-none rounded-xl px-5 py-3.5 font-black text-xs"
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2 md:space-y-3">
-                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Preferred Supplier Node</label>
-                                <select 
-                                    value={settings.preferredSupplier}
-                                    onChange={(e) => setSettings({...settings, preferredSupplier: e.target.value})}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-5 py-3.5 font-black text-xs uppercase"
-                                >
-                                    <option value="">Select Protocol Node...</option>
-                                    {suppliers.map(s => (
-                                        <option key={s._id} value={s._id}>{s.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <button className="w-full bg-primary-600 text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary-500/30 hover:bg-primary-700 active:scale-95 transition-all mt-4">
-                                Encrypt Settings
-                            </button>
-                        </form>
+                        <div className="space-y-3">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Default Qty</label>
+                            <input 
+                                type="number" 
+                                value={settings.defaultQuantity}
+                                onChange={(e) => setSettings({...settings, defaultQuantity: parseInt(e.target.value)})}
+                                className="w-full bg-slate-50 border-none rounded-xl px-5 py-4 font-black text-xs"
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                    <div className="space-y-3">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Preferred Supplier Node</label>
+                        <select 
+                            value={settings.preferredSupplier}
+                            onChange={(e) => setSettings({...settings, preferredSupplier: e.target.value})}
+                            className="w-full bg-slate-50 border-none rounded-xl px-5 py-4 font-black text-xs uppercase"
+                        >
+                            <option value="">Select Protocol Node...</option>
+                            {suppliers.map(s => (
+                                <option key={s._id} value={s._id}>{s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </form>
+            </Modal>
+
         </div>
     );
 };
