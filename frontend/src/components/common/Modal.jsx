@@ -41,7 +41,7 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = 'max-w-md'
          * On mobile  → sheet anchored to bottom (items-end)
          * On desktop → centred dialog (sm:items-center)
          */
-        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center overflow-hidden">
+        <div className="fixed inset-0 h-[100dvh] z-[200] flex items-end sm:items-center justify-center overflow-hidden">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-primary-950/40 backdrop-blur-sm"
@@ -53,20 +53,22 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = 'max-w-md'
                 'relative bg-white w-full shadow-[0_-20px_60px_rgba(0,0,0,0.15)] sm:shadow-2xl',
                 // Mobile: slides up from bottom, rounded top corners only
                 // Desktop: centred, rounded all corners
-                'rounded-t-[36px] sm:rounded-[36px]',
+                'rounded-t-[32px] sm:rounded-[32px]',
                 // Critical: max-height prevents overflow off-screen
-                // dvh (dynamic viewport height) adjusts for mobile browser chrome / keyboard
-                'max-h-[92dvh] sm:max-h-[90vh]',
+                // Small/Dynamic viewport height adjusts for mobile browser chrome
+                'max-h-[85dvh] sm:max-h-[85vh]',
                 // flex-col makes the body the only growing section
-                'flex flex-col',
+                'flex flex-col overflow-hidden',
+
                 // Slide-up on mobile, scale on desktop
                 'animate-slide-up-modal sm:animate-scale-up-modal',
                 maxWidth
             )}>
                 {/* ── Mobile drag handle ── */}
-                <div className="sm:hidden flex justify-center pt-4 pb-2 flex-shrink-0">
-                    <div className="w-12 h-1.5 bg-pharmacy-100 rounded-full" />
+                <div className="sm:hidden flex justify-center pt-4 pb-1 flex-shrink-0">
+                    <div className="w-12 h-1.5 bg-pharmacy-100/50 rounded-full" />
                 </div>
+
 
                 {/* ── Sticky Header ── */}
                 <div className="flex-shrink-0 px-8 pb-5 pt-2 sm:pt-7 flex items-center justify-between border-b border-pharmacy-50">
@@ -90,11 +92,13 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = 'max-w-md'
 
                 {/* ── Sticky Footer (action buttons) ── */}
                 {footer && (
-                    <div className="flex-shrink-0 px-8 py-5 border-t border-pharmacy-50 bg-white">
+                    <div className="flex-shrink-0 px-8 pt-5 pb-10 sm:pb-7 border-t border-pharmacy-50 bg-white">
                         {footer}
                     </div>
                 )}
+
             </div>
+
 
             <style>{`
                 @keyframes slide-up-modal {

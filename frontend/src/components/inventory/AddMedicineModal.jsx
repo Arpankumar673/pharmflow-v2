@@ -97,20 +97,22 @@ const AddMedicineModal = ({ isOpen, onClose, onSuccess, editingMed, suppliers })
          * Overlay — on mobile: sheet anchored to bottom
          *            on desktop: centred dialog
          */
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 h-[100dvh] z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm">
             {/* Card — 3-zone flex column */}
             <div className="
                 bg-white w-full sm:max-w-2xl
-                rounded-t-[36px] sm:rounded-2xl
+                rounded-t-[32px] sm:rounded-2xl
                 shadow-[0_-20px_60px_rgba(0,0,0,0.15)] sm:shadow-2xl
-                flex flex-col
-                max-h-[92dvh] sm:max-h-[90vh]
+                flex flex-col overflow-hidden
+                max-h-[85dvh] sm:max-h-[85vh]
                 animate-slide-up sm:animate-scale-up
+
             ">
                 {/* ── Mobile drag handle ── */}
                 <div className="sm:hidden flex justify-center pt-4 pb-1 flex-shrink-0">
                     <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
                 </div>
+
 
                 {/* ── Sticky Header ── */}
                 <div className="flex-shrink-0 px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white rounded-t-[36px] sm:rounded-t-2xl">
@@ -251,8 +253,10 @@ const AddMedicineModal = ({ isOpen, onClose, onSuccess, editingMed, suppliers })
                 </form>
 
                 {/* ── Sticky Footer — always visible ── */}
-                <div className="flex-shrink-0 px-6 py-4 border-t border-slate-100 bg-white flex gap-4">
+                <div className="flex-shrink-0 px-6 pt-4 pb-12 sm:pb-5 border-t border-slate-100 bg-white flex gap-4">
                     <button
+
+
                         type="button"
                         onClick={onClose}
                         className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all active:scale-95"
