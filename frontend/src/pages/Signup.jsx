@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { Pill, User, Mail, Lock, ChevronRight, Loader2, CheckCircle2, Eye, EyeOff } from '../constants/icons';
 import { toast } from 'react-toastify';
 
@@ -15,7 +16,17 @@ const Signup = () => {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
     
+    const { user } = useAuth();
     const navigate = useNavigate();
+
+    // FIXED: Modern Instant Redirect
+    // This hook watches for the 'user' state to be populated (either via email verification 
+    // or auto-login). Once the AuthContext finishes its background sync, we navigate.
+    useEffect(() => {
+        if (user) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [user, navigate]);
 
     const validateForm = () => {
         const newErrors = {};
@@ -47,29 +58,41 @@ const Signup = () => {
         
         setLoading(true);
         try {
-            // Mapping existing backend register-pharmacy logic for now
-            // In a real scenario, we might need a simpler /register-user endpoint
-            // But for PharmFlow, every signup currently expects pharmacy details
-            // I'll use the existing registerPharmacy logic but with dummy pharmacy data for now
-            // to fulfill the user's UI request while keeping it functional.
-            
-            const signupPayload = {
-                ...formData,
-                ownerName: formData.name,
-                // Dummy pharmacy data for rapid onboarding
-                name: `${formData.name}'s Pharmacy`,
-                phone: '0000000000',
-                address: 'To be configured',
-                subscriptionPlan: 'Basic'
-            };
+            // 1. SUPABASE NATIVE SIGNUP
+            // This triggers the global AuthContext 'onAuthStateChange' sync automatically
+            const { data, error } = await supabase.auth.signUp({
+                email: formData.email,
+                password: formData.password,
+                options: {
+                    data: {
+                        full_name: formData.name, // Will be used by backend to auto-create Mongo profile
+                    }
+                }
+            });
 
-            const res = await api.post('/auth/register-pharmacy', signupPayload);
-            localStorage.setItem('token', res.data.token);
-            toast.success('Establishment Successful! Welcome to PharmFlow v2');
-            navigate('/');
+            if (error) throw error;
+
+            if (data.session) {
+                // AUTO-LOGIN CASE: Supabase has 'Auto-confirm' enabled, user is instantly ready.
+                toast.success('Account Established! Initializing...', { 
+                    icon: '🚀',
+                    className: 'font-black uppercase tracking-widest text-[10px]'
+                });
+                // Navigation to /dashboard is handled by the useEffect watching the 'user' state
+            } else {
+                // VERIFICATION CASE: Supabase has 'Email confirmation' enabled.
+                toast.info('Deployment Pending: Please verify your email connection.', { 
+                    autoClose: 10000,
+                    icon: '✉️',
+                    className: 'font-black uppercase tracking-widest text-[10px]'
+                });
+            }
+
         } catch (err) {
             console.error(err);
-            toast.error(err.response?.data?.error || 'Node deployment failed');
+            toast.error(err.message || 'System deployment failed. Check network status.');
+        } finally {
+            setLoading(false);
         }
     };
 
