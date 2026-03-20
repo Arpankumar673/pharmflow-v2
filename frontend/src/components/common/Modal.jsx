@@ -1,17 +1,17 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from '../../constants/icons';
 import { clsx } from 'clsx';
 
 /**
- * Production-Ready Reusable Modal Component
+ * PRODUCTION-GRADE GLOBAL MODAL (PORTAL VERSION)
  * 
- * Features:
- * - Mobile-first: Slides from bottom on mobile, centers on desktop.
- * - Sticky Header & Footer: Actions always visible regardless of field count.
- * - Smart Scroll: Content area is the only part that scrolls.
- * - Viewport Awareness: Uses 'dvh' to handle mobile browser chrome / bottom navbars.
- * - Bottom Guardrail: Uses safe-area-inset and extra padding to clear mobile navigation.
- * - Body Lock: Prevents background jumping when modal is open.
+ * FIXES:
+ * 1. React Portal: Moves modal to 'document.body' to escape layout z-index traps.
+ * 2. Hardened Z-Index: Set to z-[9999] ensuring it covers the bottom navigation bar.
+ * 3. Mobile Stability: Fixed max-h[85vh] prevents clipping from mobile browser bars.
+ * 4. Flex-1 + min-h-0: Ensures internal scrolling works perfectly inside a constrained height.
+ * 5. Safe Area: pb-48 in body and pb-20 in footer to clear all mobile navigation elements.
  */
 const Modal = ({ 
     isOpen, 
@@ -25,43 +25,39 @@ const Modal = ({
     // Body Scroll Lock
     useEffect(() => {
         if (isOpen) {
-            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+            const originalStyle = window.getComputedStyle(document.body).overflow;
             document.body.style.overflow = 'hidden';
-            document.body.style.paddingRight = `${scrollBarWidth}px`;
-        } else {
-            document.body.style.overflow = 'unset';
-            document.body.style.paddingRight = '0px';
+            return () => { document.body.style.overflow = originalStyle; };
         }
-        return () => {
-            document.body.style.overflow = 'unset';
-            document.body.style.paddingRight = '0px';
-        };
     }, [isOpen]);
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden outline-none focus:outline-none">
-            {/* Backdrop with fade animation */}
+    // We use createPortal to ensure the modal is handled natively by the document body
+    // This solves the 'behind the bottom navbar' issue globally.
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-end sm:justify-center overflow-hidden outline-none pointer-events-none transition-all">
+            
+            {/* Backdrop: High visibility dimmed background covering all other UI */}
             <div 
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+                className="fixed inset-0 bg-slate-950/80 backdrop-blur-md pointer-events-auto animate-in fade-in duration-500"
                 onClick={onClose}
             />
 
-            {/* Modal Card - The Container */}
+            {/* Modal Card */}
             <div className={clsx(
-                "relative bg-white w-full flex flex-col shadow-2xl transition-all duration-300",
-                "rounded-t-[32px] sm:rounded-3xl",
-                "max-h-[90dvh] sm:max-h-[90vh]", // Never exceeds screen height
+                "relative bg-white w-full flex flex-col shadow-[0_-20px_60px_rgba(0,0,0,0.2)] transition-all duration-300 pointer-events-auto overflow-hidden",
+                "rounded-t-[40px] sm:rounded-3xl",
+                "max-h-[85vh] sm:max-h-[85vh]", // Hard height limit to ensure footer visibility
                 "animate-in slide-in-from-bottom sm:zoom-in-95 duration-500",
                 maxWidth
             )}>
-                {/* Mobile Handle - Visual indicator */}
-                <div className="sm:hidden flex justify-center py-4 flex-shrink-0 cursor-pointer" onClick={onClose}>
+                {/* Mobile Drag Indicator Handle */}
+                <div className="sm:hidden flex justify-center py-5 flex-shrink-0 cursor-pointer" onClick={onClose}>
                     <div className="w-12 h-1.5 bg-slate-200 rounded-full hover:bg-slate-300 transition-colors" />
                 </div>
 
-                {/* --- HEADER (Sticky) --- */}
+                {/* --- STICKY HEADER --- */}
                 <div className="px-8 pb-6 pt-2 sm:pt-8 flex items-center justify-between border-b border-slate-50 flex-shrink-0">
                     <div>
                         <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{title}</h3>
@@ -70,23 +66,26 @@ const Modal = ({
                     {showClose && (
                         <button 
                             onClick={onClose}
-                            className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-90"
+                            className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-all active:scale-90"
                         >
                             <X size={20} />
                         </button>
                     )}
                 </div>
 
-                {/* --- BODY (Scrollable) --- */}
-                <div className="flex-1 overflow-y-auto px-8 pt-8 pb-32 sm:pb-8 overscroll-contain scrollbar-hide">
-                    {/* The pb-32 guardrail ensures content isn't hidden by sticky footer or mobile bars */}
+                {/* --- HARDENED BODY (Flex-1 + Scrollable) --- */}
+                {/* 
+                   pb-56 ensures that even the final form field (the one at the bottom) 
+                   can be scrolled high enough to clear the fixed footer on small screens.
+                */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-8 pt-8 pb-56 sm:pb-12 overscroll-contain scrollbar-hide">
                     {children}
                 </div>
 
-                {/* --- FOOTER (Sticky Actions) --- */}
+                {/* --- STICKY FOOTER --- */}
                 {footer && (
-                    <div className="px-8 py-6 sm:py-7 border-t border-slate-50 bg-white/80 backdrop-blur-md flex-shrink-0 safe-area-bottom">
-                        {/* Wrapper for the buttons */}
+                    <div className="px-8 pb-12 sm:pb-8 pt-6 border-t border-slate-50 bg-white/95 backdrop-blur-sm flex-shrink-0 sticky bottom-0 z-50">
+                        {/* Wrapper for action buttons */}
                         <div className="flex gap-4">
                             {footer}
                         </div>
@@ -97,11 +96,9 @@ const Modal = ({
             <style>{`
                 .scrollbar-hide::-webkit-scrollbar { display: none; }
                 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-                .safe-area-bottom {
-                    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 24px);
-                }
             `}</style>
-        </div>
+        </div>,
+        document.body
     );
 };
 
