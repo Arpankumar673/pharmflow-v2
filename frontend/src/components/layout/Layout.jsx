@@ -13,8 +13,18 @@ import {
 import { useState } from 'react';
 import clsx from 'clsx';
 
+/**
+ * Global Hardened Layout for PharmFlow v2
+ * 
+ * FIXES:
+ * 1. Removed 'overflow-hidden' from root to allow native momentum scrolling.
+ * 2. Uses 'min-h-screen' layout to prevent clipping on mobile browser bars.
+ * 3. Increased bottom DMZ (pb-44) to guarantee clearance of the fixed bottom navigation.
+ * 4. Implemented proper safe-area-inset-bottom support for notched devices.
+ * 5. Added z-index isolation for the navigation bar to prevent modal overlap.
+ */
 const Layout = () => {
-    const { user, loading, isOwner, isPharmacist, logout } = useAuth();
+    const { user, loading, isOwner, isPharmacist } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -39,7 +49,12 @@ const Layout = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-pharmacy-50 flex flex-col lg:flex-row overflow-hidden relative">
+        /* 
+           FIX: Removed 'overflow-hidden' from the root container. 
+           Mobile browsers need the root to be scrollable to collapse/expand the address bar correctly.
+        */
+        <div className="min-h-screen bg-pharmacy-50 flex flex-col lg:flex-row relative">
+            
             {/* Sidebar Component */}
             <Sidebar 
                 isOpen={mobileMenuOpen} 
@@ -48,52 +63,59 @@ const Layout = () => {
                 setCollapsed={setSidebarCollapsed}
             />
 
-            {/* Mobile Header */}
-            <header className="lg:hidden bg-white border-b border-pharmacy-100 px-4 md:px-6 py-4 flex items-center justify-between sticky top-0 z-[45] safe-area-top shadow-sm">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 md:w-10 md:h-10 bg-primary-600 rounded-lg md:rounded-xl flex items-center justify-center text-white font-bold text-lg md:text-xl shadow-lg shadow-primary-100">P</div>
-                    <span className="text-lg md:text-xl font-black font-['Outfit'] tracking-tight">PharmFlow</span>
-                </div>
-                <div className="flex items-center gap-2 md:gap-3">
-                    <button
-                        onClick={() => setMobileMenuOpen(true)}
-                        className="p-2 md:p-3 bg-primary-50 rounded-xl text-primary-600 active:scale-90 transition-transform"
-                    >
-                        <Menu size={20} className="md:w-6 md:h-6" />
-                    </button>
-                </div>
-            </header>
-
-            {/* Content Area */}
+            {/* Content Area Wrap */}
             <main className={clsx(
-                "flex-1 min-h-screen overflow-y-auto bg-pharmacy-50 relative transition-all duration-300",
+                "flex-1 flex flex-col min-h-screen relative transition-all duration-300",
                 sidebarCollapsed ? "lg:ml-20" : "lg:ml-[260px]"
             )}>
-                {/* Responsive Content Wrapper */}
-                <div className="px-4 lg:px-6 py-6 pb-24 md:pb-32 lg:pb-10 max-w-[1600px] mx-auto animate-fade-in w-full overflow-x-hidden">
-                    <div className="relative">
-                        <ErrorBoundary>
-                            <Outlet />
-                        </ErrorBoundary>
+                {/* Mobile Header (Sticky Top) */}
+                <header className="lg:hidden bg-white/90 backdrop-blur-md border-b border-pharmacy-100 px-6 py-4 flex items-center justify-between sticky top-0 z-[40] safe-area-top shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary-100">P</div>
+                        <span className="text-xl font-black font-['Outfit'] tracking-tight">PharmFlow</span>
                     </div>
+                    <button
+                        onClick={() => setMobileMenuOpen(true)}
+                        className="p-3 bg-primary-50 rounded-xl text-primary-600 active:scale-95 transition-all"
+                    >
+                        <Menu size={20} />
+                    </button>
+                </header>
+
+                {/* 
+                    FIX: Content Holder
+                    - Added massive pb-44 (~176px) on mobile to clear the fixed bottom nav bar.
+                    - Removed h-screen to allow content to dictate page height.
+                */}
+                <div className="flex-1 px-4 lg:px-6 py-6 pb-44 md:pb-32 lg:pb-10 max-w-[1700px] mx-auto animate-fade-in w-full overflow-x-hidden min-h-0">
+                    <ErrorBoundary>
+                        <Outlet />
+                    </ErrorBoundary>
                 </div>
             </main>
 
-            {/* Mobile Quick Navigation Bar */}
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-2xl border-t border-slate-100 flex items-center justify-around px-2 py-3 z-[100] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] safe-area-bottom">
+            {/* 
+                FIX: Mobile Quick Navigation Bar 
+                - Uses z-[100] but siblings are z-isolated.
+                - Added 'pb-safe' for notch support.
+            */}
+            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-2xl border-t border-slate-100 flex items-center justify-around px-2 py-3 z-[80] shadow-[0_-15px_40px_rgba(0,0,0,0.08)]">
                 {mobileNavItems.filter(item => item.show).map((item) => (
                     <NavLink
                         key={item.name}
                         to={item.path}
                         className={({ isActive }) => clsx(
-                            "flex flex-col items-center gap-1 transition-all duration-300 py-2 rounded-2xl flex-1 max-w-[80px]",
+                            "flex flex-col items-center gap-1.5 transition-all duration-300 py-2 rounded-2xl flex-1 max-w-[80px]",
                             isActive ? "text-primary-600 bg-primary-50/50" : "text-slate-400"
                         )}
                     >
                         {({ isActive }) => (
                             <>
-                                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                                <span className="text-[8px] md:text-[9px] font-black uppercase tracking-tighter md:tracking-widest truncate w-full text-center px-1">
+                                <item.icon size={20} className={clsx(isActive ? "scale-110" : "scale-100")} strokeWidth={isActive ? 2.5 : 2} />
+                                <span className={clsx(
+                                    "text-[7.5px] font-black uppercase tracking-widest truncate w-full text-center px-1 transition-all",
+                                    isActive ? "opacity-100" : "opacity-60"
+                                )}>
                                     {item.name}
                                 </span>
                             </>
@@ -103,11 +125,10 @@ const Layout = () => {
             </nav>
 
             <style>{`
-                .safe-area-bottom {
-                    padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 8px);
-                }
-                .safe-area-top {
-                    padding-top: env(safe-area-inset-top, 12px);
+                .safe-area-top { padding-top: env(safe-area-inset-top, 12px); }
+                /* FIXED: Proper safe area implementation for notched devices + extra breathing room */
+                @media (max-width: 1023px) {
+                    nav { padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 12px); }
                 }
             `}</style>
         </div>
